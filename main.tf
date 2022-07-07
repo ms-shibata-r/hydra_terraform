@@ -155,6 +155,27 @@ data "aws_iam_policy_document" "assume_role" {
   }
 }
 
+resource "aws_iam_policy" "ecs_ssm" {
+  name   = "ecs_ssm"
+  policy = <<EOT
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssmmessages:CreateControlChannel",
+                "ssmmessages:CreateDataChannel",
+                "ssmmessages:OpenControlChannel",
+                "ssmmessages:OpenDataChannel"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+EOT
+}
+
 resource "aws_iam_role" "ecs_task_execution_role" {
   name               = "MyEcsTaskRole"
   assume_role_policy = data.aws_iam_policy_document.assume_role.json
@@ -165,12 +186,17 @@ resource "aws_iam_role_policy_attachment" "amazon_ecs_task_execution_role_policy
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+resource "aws_iam_role_policy_attachment" "amazon_ecs_task_execution_role_policy2" {
+  role       = aws_iam_role.ecs_task_execution_role.name
+  policy_arn = aws_iam_policy.ecs_ssm.arn
+}
+
 # ----------------------------------
 # SecurityGroup
 # ----------------------------------
-resource "aws_security_group" "hydra_sg_terraform" {
-  name        = "hydra_sg_terraform"
-  description = "hydra_sg_terraform"
+resource "aws_security_group" "hydra_sg" {
+  name        = "hydra_sg"
+  description = "hydra_sg"
 
   vpc_id      = "${aws_vpc.hydra_vpc.id}"
 
@@ -182,15 +208,15 @@ resource "aws_security_group" "hydra_sg_terraform" {
   }
 
   tags = {
-    Name = "hydra_sg_terraform"
+    Name = "hydra_sg"
   }
 }
 
 # ----------------------------------
 # SecurityGroup Rule
 # ----------------------------------
-resource "aws_security_group_rule" "hydra_sg_rule_terraform_1" {
-  security_group_id = "${aws_security_group.hydra_sg_terraform.id}"
+resource "aws_security_group_rule" "hydra_sg_rule_1" {
+  security_group_id = "${aws_security_group.hydra_sg.id}"
 
   type = "ingress"
 
@@ -201,8 +227,8 @@ resource "aws_security_group_rule" "hydra_sg_rule_terraform_1" {
   cidr_blocks = ["0.0.0.0/0"]
 }
 
-resource "aws_security_group_rule" "hydra_sg_rule_terraform_2" {
-  security_group_id = "${aws_security_group.hydra_sg_terraform.id}"
+resource "aws_security_group_rule" "hydra_sg_rule_2" {
+  security_group_id = "${aws_security_group.hydra_sg.id}"
 
   type = "ingress"
 
@@ -213,23 +239,11 @@ resource "aws_security_group_rule" "hydra_sg_rule_terraform_2" {
   cidr_blocks = ["0.0.0.0/0"]
 }
 
-resource "aws_security_group_rule" "hydra_sg_rule_terraform_3" {
-  security_group_id = "${aws_security_group.hydra_sg_terraform.id}"
-
-  type = "ingress"
-
-  from_port = 5555
-  to_port   = 5555
-  protocol  = "tcp"
-
-  cidr_blocks = ["0.0.0.0/0"]
-}
-
 # ----------------------------------
 # ELB Target Group
 # ----------------------------------
-resource "aws_lb_target_group" "hydra_lb_tg_terraform_1" {
-  name = "hydra-lb-tg-terraform-1"
+resource "aws_lb_target_group" "hydra_lb_tg_1" {
+  name = "hydra-lb-tg-1"
 
   vpc_id = "${aws_vpc.hydra_vpc.id}"
 
@@ -238,8 +252,8 @@ resource "aws_lb_target_group" "hydra_lb_tg_terraform_1" {
   target_type = "ip"
 }
 
-resource "aws_lb_target_group" "hydra_lb_tg_terraform_2" {
-  name = "hydra-lb-tg-terraform-2"
+resource "aws_lb_target_group" "hydra_lb_tg_2" {
+  name = "hydra-lb-tg-2"
 
   vpc_id = "${aws_vpc.hydra_vpc.id}"
 
@@ -248,69 +262,47 @@ resource "aws_lb_target_group" "hydra_lb_tg_terraform_2" {
   target_type = "ip"
 }
 
-resource "aws_lb_target_group" "hydra_lb_tg_terraform_3" {
-  name = "hydra-lb-tg-terraform-3"
-
-  vpc_id = "${aws_vpc.hydra_vpc.id}"
-
-  port        = 5555
-  protocol    = "TCP"
-  target_type = "ip"
-}
-
 # ----------------------------------
 # ALB
 # ----------------------------------
-resource "aws_lb" "hydra_aws_lb_terraform" {
+resource "aws_lb" "hydra_aws_lb" {
   load_balancer_type = "network"
-  name               = "hydra-aws-lb-terraform"
-  subnets         = ["${aws_subnet.hydra_public_subnet_a.id}","${aws_subnet.hydra_public_subnet_c.id}","${aws_subnet.hydra_public_subnet_d.id}"]
+  name               = "hydra-aws-lb"
+  subnets            = ["${aws_subnet.hydra_public_subnet_a.id}","${aws_subnet.hydra_public_subnet_c.id}","${aws_subnet.hydra_public_subnet_d.id}"]
 }
 
 # ----------------------------------
 # Listener
 # ----------------------------------
-resource "aws_lb_listener" "hydra_lb_listener_terraform_1" {
+resource "aws_lb_listener" "hydra_lb_listener_1" {
   port              = "4444"
   protocol          = "TCP"
 
-  load_balancer_arn = "${aws_lb.hydra_aws_lb_terraform.arn}"
+  load_balancer_arn = "${aws_lb.hydra_aws_lb.arn}"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.hydra_lb_tg_terraform_1.arn
+    target_group_arn = aws_lb_target_group.hydra_lb_tg_1.arn
   }
 }
 
-resource "aws_lb_listener" "hydra_lb_listener_terraform_2" {
+resource "aws_lb_listener" "hydra_lb_listener_2" {
   port              = "4445"
   protocol          = "TCP"
 
-  load_balancer_arn = "${aws_lb.hydra_aws_lb_terraform.arn}"
+  load_balancer_arn = "${aws_lb.hydra_aws_lb.arn}"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.hydra_lb_tg_terraform_2.arn
-  }
-}
-
-resource "aws_lb_listener" "hydra_lb_listener_terraform_3" {
-  port              = "5555"
-  protocol          = "TCP"
-
-  load_balancer_arn = "${aws_lb.hydra_aws_lb_terraform.arn}"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.hydra_lb_tg_terraform_3.arn
+    target_group_arn = aws_lb_target_group.hydra_lb_tg_2.arn
   }
 }
 
 #--------------------------------------------------------------
 # rds cluster parameter group
 #--------------------------------------------------------------
-resource "aws_rds_cluster_parameter_group" "hydra_rds_cluster_parameter_group_terraform" {
-  name   = "hydra-rds-cluster-parameter-group-terraform"
+resource "aws_rds_cluster_parameter_group" "hydra_rds_cluster_parameter_group" {
+  name   = "hydra-rds-cluster-parameter-group"
   family = "aurora-mysql8.0"
 
   parameter {
@@ -371,8 +363,8 @@ resource "aws_rds_cluster_parameter_group" "hydra_rds_cluster_parameter_group_te
 #--------------------------------------------------------------
 # RDS Security group
 #--------------------------------------------------------------
-resource "aws_security_group" "hydra_rds_sg_terraform" {
-  name        = "hydra_rds_sg_terraform"
+resource "aws_security_group" "hydra_rds_sg" {
+  name        = "hydra_rds_sg"
   description = "RDS service security"
   vpc_id      = aws_vpc.hydra_vpc.id
 
@@ -391,48 +383,46 @@ resource "aws_security_group" "hydra_rds_sg_terraform" {
   }
 
   tags = {
-    Name = "hydra_rds_sg_terraform"
+    Name = "hydra_rds_sg"
   }
 }
 
 #--------------------------------------------------------------
 # Subnet group
 #--------------------------------------------------------------
-resource "aws_db_subnet_group" "hydra_rds_subnet_group_terraform" {
-  name        = "hydra_rds_subnet_group_terraform"
-  description = "hydra_rds_subnet_group_terraform"
+resource "aws_db_subnet_group" "hydra_rds_subnet_group" {
+  name        = "hydra_rds_subnet_group"
+  description = "hydra_rds_subnet_group"
   subnet_ids  = ["${aws_subnet.hydra_private_subnet_a.id}","${aws_subnet.hydra_private_subnet_c.id}","${aws_subnet.hydra_private_subnet_d.id}"]
 }
 
 # ----------------------------------
 # RDS
 # ----------------------------------
-resource "aws_rds_cluster" "hydra_db_cluster_mysql80_terraform" {
-  cluster_identifier = "hydra-db-cluster-mysql80-terraform"
-  engine         = "aurora-mysql"
-  engine_version = "8.0.mysql_aurora.3.01.0"
-  master_username = "hydra"
-  master_password = "hydra2022"
-  port            = 3306
-  database_name   = "hydra"
+resource "aws_rds_cluster" "hydra_db_cluster" {
+  cluster_identifier = "hydra-db-cluster"
+  engine             = "aurora-mysql"
+  engine_version     = "8.0.mysql_aurora.3.01.0"
+  master_username    = "hydra"
+  master_password    = "hydra2022"
+  port               = 3306
+  database_name      = "hydra"
 
-  vpc_security_group_ids = [aws_security_group.hydra_rds_sg_terraform.id]
-  db_subnet_group_name = aws_db_subnet_group.hydra_rds_subnet_group_terraform.name
-  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.hydra_rds_cluster_parameter_group_terraform.name
-
+  vpc_security_group_ids = [aws_security_group.hydra_rds_sg.id]
+  db_subnet_group_name = aws_db_subnet_group.hydra_rds_subnet_group.name
+  db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.hydra_rds_cluster_parameter_group.name
   backup_retention_period = 15
   preferred_backup_window = "18:00-20:00"
-
   skip_final_snapshot = true
   apply_immediately   = true
 }
 
-resource "aws_rds_cluster_instance" "hydra_db_instance_terraform" {
+resource "aws_rds_cluster_instance" "hydra_db_instance" {
   count = 1
-  identifier             = "hydra-db-instance-terraform"
-  cluster_identifier     = aws_rds_cluster.hydra_db_cluster_mysql80_terraform.id
-  engine                 = aws_rds_cluster.hydra_db_cluster_mysql80_terraform.engine
-  engine_version         = aws_rds_cluster.hydra_db_cluster_mysql80_terraform.engine_version
+  identifier             = "hydra-db-instance"
+  cluster_identifier     = aws_rds_cluster.hydra_db_cluster.id
+  engine                 = aws_rds_cluster.hydra_db_cluster.engine
+  engine_version         = aws_rds_cluster.hydra_db_cluster.engine_version
   instance_class         = "db.t3.medium"
   publicly_accessible    = true
 }
@@ -443,28 +433,36 @@ resource "null_resource" "db_setup" {
     name = "db_setup"
   }
   depends_on = [
-    aws_rds_cluster.hydra_db_cluster_mysql80_terraform,
-    aws_rds_cluster_instance.hydra_db_instance_terraform,
+    aws_rds_cluster.hydra_db_cluster,
+    aws_rds_cluster_instance.hydra_db_instance,
   ]
 
   provisioner "local-exec" {
-    command = "mysql -h hydra-db-cluster-mysql80-terraform.cluster-ro-cggh3018flmj.ap-northeast-1.rds.amazonaws.com -u hydra -phydra2022 hydra < ./aurora_create_db.sql"
+    command = "mysql -h ${aws_rds_cluster.hydra_db_cluster.endpoint} -u ${aws_rds_cluster.hydra_db_cluster.master_username} -p${aws_rds_cluster.hydra_db_cluster.master_password} ${aws_rds_cluster.hydra_db_cluster.database_name} < ./aurora_create_db.sql"
   }
+}
+
+# ----------------------------------
+# CloudWatch Logs
+# ----------------------------------
+resource "aws_cloudwatch_log_group" "hydra_ecs_task_definition" {
+  name = "/ecs/hydra_ecs_task_definition"
 }
 
 # ----------------------------------
 # ECS Cluster
 # ----------------------------------
-resource "aws_ecs_cluster" "hydra_ecs_cluster_terraform" {
-  name = "hydra_ecs_cluster_terraform"
+resource "aws_ecs_cluster" "hydra_ecs_cluster" {
+  name = "hydra_ecs_cluster"
 }
 
 # ----------------------------------
 # Task Definition
 # ----------------------------------
-resource "aws_ecs_task_definition" "hydra_ecs_task_definition_terraform" {
-  family = "hydra_ecs_task_definition_terraform"
+resource "aws_ecs_task_definition" "hydra_ecs_task_definition" {
+  family = "hydra_ecs_task_definition"
 
+  task_role_arn            = aws_iam_role.ecs_task_execution_role.arn
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
 
   requires_compatibilities = ["FARGATE"]
@@ -487,17 +485,17 @@ resource "aws_ecs_task_definition" "hydra_ecs_task_definition_terraform" {
       {
         "containerPort": 4445,
         "hostPort": 4445
-      },
-      {
-        "containerPort": 5555,
-        "hostPort": 5555
       }
     ],
     "essential": true,
     "environment": [
       {
         "name": "DSN",
-        "value": "mysql://${aws_rds_cluster.hydra_db_cluster_mysql80_terraform.master_username}:${aws_rds_cluster.hydra_db_cluster_mysql80_terraform.master_password}@tcp(hydra-db-cluster-mysql80-terraform.cluster-ro-cggh3018flmj.ap-northeast-1.rds.amazonaws.com:3306)/${aws_rds_cluster.hydra_db_cluster_mysql80_terraform.database_name}?parseTime=true"
+        "value": "mysql://${aws_rds_cluster.hydra_db_cluster.master_username}:${aws_rds_cluster.hydra_db_cluster.master_password}@tcp(${aws_rds_cluster.hydra_db_cluster.endpoint}:3306)/${aws_rds_cluster.hydra_db_cluster.database_name}?parseTime=true"
+      },
+      {
+        "name": "ALB",
+        "value": "${aws_lb.hydra_aws_lb.dns_name}"
       }
     ],
     "command" : ["serve","-c","/etc/config/hydra/hydra.yml","all","--dangerous-force-http"],
@@ -505,9 +503,12 @@ resource "aws_ecs_task_definition" "hydra_ecs_task_definition_terraform" {
       "logDriver": "awslogs",
       "options": {
         "awslogs-region": "ap-northeast-1",
-        "awslogs-group": "/ecs/hydra_ecs_task_definition_terraform",
+        "awslogs-group": "/ecs/hydra_ecs_task_definition",
         "awslogs-stream-prefix": "ecs"
       }
+    },
+    "linuxParameters" : {
+      "initProcessEnabled": true
     }
   }
 ]
@@ -517,44 +518,36 @@ EOL
 # ----------------------------------
 # ECS Service
 # ----------------------------------
-resource "aws_ecs_service" "hydra_ecs_service_terraform" {
+resource "aws_ecs_service" "hydra_ecs_service" {
   depends_on = [
-    aws_rds_cluster.hydra_db_cluster_mysql80_terraform,
-    aws_rds_cluster_instance.hydra_db_instance_terraform,
-    aws_ecs_task_definition.hydra_ecs_task_definition_terraform
+    aws_rds_cluster.hydra_db_cluster,
+    aws_rds_cluster_instance.hydra_db_instance,
+    aws_ecs_task_definition.hydra_ecs_task_definition
   ]
 
-  name = "hydra_ecs_service_terraform"
-
-  cluster = "${aws_ecs_cluster.hydra_ecs_cluster_terraform.name}"
-
+  name = "hydra_ecs_service"
+  cluster = "${aws_ecs_cluster.hydra_ecs_cluster.name}"
   launch_type = "FARGATE"
-
   desired_count = "1"
-
-  task_definition = "${aws_ecs_task_definition.hydra_ecs_task_definition_terraform.arn}"
+  task_definition = "${aws_ecs_task_definition.hydra_ecs_task_definition.arn}"
+  health_check_grace_period_seconds = 60
+  enable_execute_command = true
 
   network_configuration {
-    subnets         = ["${aws_subnet.hydra_public_subnet_a.id}","${aws_subnet.hydra_public_subnet_c.id}","${aws_subnet.hydra_public_subnet_d.id}"]
-    security_groups = ["${aws_security_group.hydra_sg_terraform.id}"]
+    subnets          = ["${aws_subnet.hydra_public_subnet_a.id}","${aws_subnet.hydra_public_subnet_c.id}","${aws_subnet.hydra_public_subnet_d.id}"]
+    security_groups  = ["${aws_security_group.hydra_sg.id}"]
     assign_public_ip = true
   }
 
   load_balancer {
-      target_group_arn = "${aws_lb_target_group.hydra_lb_tg_terraform_1.arn}"
-      container_name   = "hydra"
-      container_port   = "4444"
+    target_group_arn = "${aws_lb_target_group.hydra_lb_tg_1.arn}"
+    container_name   = "hydra"
+    container_port   = "4444"
   }
 
   load_balancer {
-      target_group_arn = "${aws_lb_target_group.hydra_lb_tg_terraform_2.arn}"
-      container_name   = "hydra"
-      container_port   = "4445"
-  }
-
-  load_balancer {
-      target_group_arn = "${aws_lb_target_group.hydra_lb_tg_terraform_3.arn}"
-      container_name   = "hydra"
-      container_port   = "5555"
+    target_group_arn = "${aws_lb_target_group.hydra_lb_tg_2.arn}"
+    container_name   = "hydra"
+    container_port   = "4445"
   }
 }
