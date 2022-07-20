@@ -1,0 +1,61 @@
+[client]
+user = ${aurora_user}
+password = ${aurora_password}
+host = ${aurora_host}
+port = ${aurora_port}
+
+
+resource "local_file" "mysql_config_file" {
+  filename = "./.my.cnf"
+  content  = data.template_file.mysql_config_file.rendered
+}
+
+data "template_file" "mysql_config_file" {
+  template = file("./aurora_mysql_conf_template.cnf")
+
+  vars = {
+    aurora_user     = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.master_username
+    aurora_password = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.master_password
+    aurora_host     = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.endpoint
+    aurora_port     = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.port
+  }
+}
+
+resource "null_resource" "db_setup" {
+  depends_on = [
+    aws_rds_cluster.hydra-db-cluster-mysql80-terraform,
+    aws_rds_cluster_instance.hydra-db-instance-terraform,
+  ]
+
+  provisioner "local-exec" {
+    command = "mysql --defaults-extra-file=./.my.cnf ${aws_rds_cluster.hydra-db-cluster-mysql80-terraform.database_name} < ./aurora_create_db.sql"
+  }
+}
+
+
+resource "null_resource" "db_setup" {
+  triggers = {
+    name = "db_setup"
+  }
+  depends_on = [
+    aws_rds_cluster.hydra_db_cluster_mysql80_terraform,
+    aws_rds_cluster_instance.hydra_db_instance_terraform,
+  ]
+
+  provisioner "local-exec" {
+    command = [
+      "sudo yum -y install mysql",
+      "mysql -u hydra -phydra2022 -h hydra-db-instance-terraform.cggh3018flmj.ap-northeast-1.rds.amazonaws.com < ./aurora_create_db.sql",
+    ]
+  }
+}
+
+provider "mysql" {
+  endpoint = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.endpoint
+  username = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.master_username
+  password = aws_rds_cluster.hydra-db-cluster-mysql80-terraform.master_password
+}
+
+resource "mysql_database" "hydra" {
+  name = "hydra"
+}
