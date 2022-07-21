@@ -423,6 +423,18 @@ resource "aws_security_group" "hydra_rds_sg" {
   }
 }
 
+resource "aws_security_group_rule" "hydra_rds_sg_rule_1" {
+  depends_on = [aws_security_group.hydra_rds_sg]
+  security_group_id = "${aws_security_group.hydra_rds_sg.id}"
+
+  type = "ingress"
+  from_port = 0
+  to_port   = 0
+  protocol  = "-1"
+
+  cidr_blocks = ["0.0.0.0/0"]
+}
+
 #--------------------------------------------------------------
 # Subnet group
 #--------------------------------------------------------------
@@ -695,51 +707,14 @@ data "aws_s3_object" "golang_zip_hash" {
 }
 
 # ----------------------------------
-# SecurityGroup
-# ----------------------------------
-resource "aws_security_group" "api_facede_sg" {
-  name        = "api_facede_sg"
-  description = "api_facede_sg"
-
-  vpc_id      = "${aws_vpc.hydra_vpc.id}"
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "api_facede_sg"
-  }
-}
-
-# ----------------------------------
-# SecurityGroup Rule
-# ----------------------------------
-resource "aws_security_group_rule" "api_facede_sg" {
-  depends_on = [aws_security_group.api_facede_sg]
-  security_group_id = "${aws_security_group.api_facede_sg.id}"
-
-  type = "ingress"
-
-  from_port = 0
-  to_port   = 65535
-  protocol  = "tcp"
-
-  cidr_blocks = ["10.0.0.0/16"]
-}
-
-# ----------------------------------
 # Secrets Manager
 # ----------------------------------
-resource "aws_secretsmanager_secret" "hydra_rds" {
-  name = "hydra_rds"
+resource "aws_secretsmanager_secret" "hydra_rds5" {
+  name = "hydra_rds5"
 }
 
 resource "aws_secretsmanager_secret_version" "hydra_rds" {
-  secret_id     = aws_secretsmanager_secret.hydra_rds.id
+  secret_id     = aws_secretsmanager_secret.hydra_rds5.id
   secret_string = jsonencode(
     {
       "username" = aws_rds_cluster.hydra_db_cluster.master_username,
@@ -787,7 +762,7 @@ resource "aws_iam_policy" "hydra_rds_seacret" {
                     "secretsmanager:ListSecretVersionIds"
                 ],
                 "Resource": [
-                    aws_secretsmanager_secret.hydra_rds.arn
+                    aws_secretsmanager_secret.hydra_rds5.arn
                 ]
             }
         ]
@@ -826,32 +801,6 @@ resource "aws_security_group" "hydra_rds_proxy_sg" {
 }
 
 # ----------------------------------
-# データベースプロキシ SecurityGroup Rule
-# ----------------------------------
-resource "aws_security_group_rule" "hydra_rds_proxy_sg" {
-  depends_on = [aws_security_group.hydra_rds_proxy_sg]
-  security_group_id = aws_security_group.hydra_rds_proxy_sg.id
-  type = "ingress"
-  from_port = 3306
-  to_port   = 3306
-  protocol  = "tcp"
-  source_security_group_id = aws_security_group.api_facede_sg.id
-}
-
-# ----------------------------------
-# RDS SecurityGroup Rule
-# ----------------------------------
-resource "aws_security_group_rule" "hydra_rds_sg" {
-  depends_on = [aws_security_group_rule.hydra_rds_proxy_sg]
-  security_group_id = aws_security_group.hydra_rds_sg.id
-  type = "ingress"
-  from_port = 3306
-  to_port   = 3306
-  protocol  = "tcp"
-  source_security_group_id = aws_security_group.hydra_rds_proxy_sg.id
-}
-
-# ----------------------------------
 # データベースプロキシ
 # ----------------------------------
 resource "aws_db_proxy" "hydra_rds_proxy" {
@@ -867,7 +816,7 @@ resource "aws_db_proxy" "hydra_rds_proxy" {
   auth {
     auth_scheme = "SECRETS"
     iam_auth    = "DISABLED"
-    secret_arn  = aws_secretsmanager_secret.hydra_rds.arn
+    secret_arn  = aws_secretsmanager_secret.hydra_rds5.arn
   }
 
   depends_on = [aws_rds_cluster.hydra_db_cluster, aws_secretsmanager_secret_version.hydra_rds]
@@ -881,6 +830,92 @@ resource "aws_db_proxy_target" "hydra_rds_proxy" {
   db_cluster_identifier = aws_rds_cluster.hydra_db_cluster.id
   db_proxy_name = aws_db_proxy.hydra_rds_proxy.name
   target_group_name = "default"
+}
+
+# ----------------------------------
+# SecurityGroup
+# ----------------------------------
+resource "aws_iam_role_policy" "api_facede_proxy_iam" {
+  name = "api_facede_proxy_iam"
+  role = aws_iam_role.api_facede_iam.id
+
+  policy = jsonencode({
+      "Version": "2012-10-17",
+      "Statement": [
+          {
+              "Effect": "Allow",
+              "Action": "rds-db:connect",
+              "Resource": "arn:aws:rds-db:ap-northeast-1:616004226956:dbuser:${aws_db_proxy.hydra_rds_proxy.endpoint}/*"
+          }
+      ]
+  })
+}
+
+# ----------------------------------
+# SecurityGroup
+# ----------------------------------
+resource "aws_security_group" "api_facede_sg" {
+  name        = "api_facede_sg"
+  description = "api_facede_sg"
+
+  vpc_id      = "${aws_vpc.hydra_vpc.id}"
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "api_facede_sg"
+  }
+}
+
+# ----------------------------------
+# SecurityGroup Rule
+# ----------------------------------
+resource "aws_security_group_rule" "api_facede_sg" {
+  depends_on = [aws_security_group.api_facede_sg]
+  security_group_id = "${aws_security_group.api_facede_sg.id}"
+
+  type = "ingress"
+
+  from_port = 0
+  to_port   = 65535
+  protocol  = "tcp"
+
+  cidr_blocks = ["10.0.0.0/16"]
+}
+
+# ----------------------------------
+# RDS SecurityGroup Rule
+# ----------------------------------
+resource "aws_security_group_rule" "hydra_rds_sg_rule_2" {
+  depends_on = [
+    aws_security_group_rule.hydra_rds_proxy_sg,
+    aws_security_group.hydra_rds_sg,
+    aws_security_group_rule.hydra_rds_sg_rule_1
+  ]
+  security_group_id = aws_security_group.hydra_rds_sg.id
+  type = "ingress"
+  from_port = 3306
+  to_port   = 3306
+  protocol  = "tcp"
+  source_security_group_id = aws_security_group.hydra_rds_proxy_sg.id
+}
+
+# ----------------------------------
+# データベースプロキシ SecurityGroup Rule
+# ----------------------------------
+resource "aws_security_group_rule" "hydra_rds_proxy_sg" {
+  depends_on = [aws_security_group.hydra_rds_proxy_sg]
+  security_group_id = aws_security_group.hydra_rds_proxy_sg.id
+  type = "ingress"
+  from_port = 3306
+  to_port   = 3306
+  protocol  = "tcp"
+  source_security_group_id = aws_security_group.api_facede_sg.id
 }
 
 # ----------------------------------
@@ -976,6 +1011,7 @@ resource "aws_api_gateway_deployment" "api_facede" {
 # API GatewayにLambda関数へのアクセスを許可
 # ----------------------------------
 resource "aws_lambda_permission" "api_facede" {
+   statement_id  = "AllowExecutionFromAPIGateway"
    action        = "lambda:InvokeFunction"
    function_name = aws_lambda_function.api_facede.function_name
    principal     = "apigateway.amazonaws.com"
